@@ -10,12 +10,12 @@
 #include "planner/operator/logical_table_function_call.h"
 #include "processor/execution_context.h"
 #include "processor/operator/persistent/batch_insert.h"
+#include "processor/operator/persistent/rel_batch_insert.h"
 #include "processor/operator/table_function_call.h"
 #include "processor/plan_mapper.h"
 #include "processor/result/factorized_table_util.h"
 #include "storage/storage_manager.h"
 #include "storage/table/node_table.h"
-#include "processor/operator/persistent/rel_batch_insert.h"
 
 using namespace kuzu::common;
 using namespace kuzu::function;
@@ -166,20 +166,22 @@ static std::unique_ptr<PhysicalOperator> getPhysicalPlan(PlanMapper* planMapper,
         FactorizedTableUtils::getSingleStringColumnFTable(clientContext->getMemoryManager());
     // Create RelBatchInsert and dummy sink operators.
     auto upperBatchInsertSharedState = std::make_shared<BatchInsertSharedState>(fTable);
-    auto upperInsertInfo = std::make_unique<RelBatchInsertInfo>(upperRelTableEntry->getName(), std::vector<LogicalType>{} /* warningColumnTypes */, RelDataDirection::FWD);
+    auto upperInsertInfo = std::make_unique<RelBatchInsertInfo>(upperRelTableEntry->getName(),
+        std::vector<LogicalType>{} /* warningColumnTypes */, RelDataDirection::FWD);
     auto upperPrintInfo = std::make_unique<RelBatchInsertPrintInfo>(upperRelTableEntry->getName());
     auto upperProgress = std::make_shared<RelBatchInsertProgressSharedState>();
-    auto upperBatchInsert = std::make_unique<RelBatchInsert>(
-            std::move(upperInsertInfo), partitionerSharedState->upperPartitionerSharedState, upperBatchInsertSharedState,
-            planMapper->getOperatorID(), std::move(upperPrintInfo), upperProgress);
+    auto upperBatchInsert = std::make_unique<RelBatchInsert>(std::move(upperInsertInfo),
+        partitionerSharedState->upperPartitionerSharedState, upperBatchInsertSharedState,
+        planMapper->getOperatorID(), std::move(upperPrintInfo), upperProgress);
     upperBatchInsert->setDescriptor(std::make_unique<ResultSetDescriptor>(logicalOp->getSchema()));
 
     auto lowerBatchInsertSharedState = std::make_shared<BatchInsertSharedState>(fTable);
-    auto lowerInsertInfo = std::make_unique<RelBatchInsertInfo>(lowerRelTableEntry->getName(), std::vector<LogicalType>{} /* warningColumnTypes */, RelDataDirection::FWD);
+    auto lowerInsertInfo = std::make_unique<RelBatchInsertInfo>(lowerRelTableEntry->getName(),
+        std::vector<LogicalType>{} /* warningColumnTypes */, RelDataDirection::FWD);
     auto lowerPrintInfo = std::make_unique<RelBatchInsertPrintInfo>(lowerRelTableEntry->getName());
     auto lowerProgress = std::make_shared<RelBatchInsertProgressSharedState>();
-    auto lowerBatchInsert = std::make_unique<RelBatchInsert>(
-        std::move(lowerInsertInfo), partitionerSharedState->lowerPartitionerSharedState, lowerBatchInsertSharedState,
+    auto lowerBatchInsert = std::make_unique<RelBatchInsert>(std::move(lowerInsertInfo),
+        partitionerSharedState->lowerPartitionerSharedState, lowerBatchInsertSharedState,
         planMapper->getOperatorID(), std::move(lowerPrintInfo), lowerProgress);
     lowerBatchInsert->setDescriptor(std::make_unique<ResultSetDescriptor>(logicalOp->getSchema()));
 
