@@ -96,6 +96,7 @@ static void processEntryNodeInKNNSearch(const void* queryVector, const void* ent
 static void processNbrNodeInKNNSearch(const void* queryVector, const void* nbrVector,
     common::offset_t nbrOffset, uint64_t ef, VisitedState& visited, const metric_func_t& metricFunc,
     uint64_t dimension, min_node_priority_queue_t& candidates, max_node_priority_queue_t& result) {
+    KU_ASSERT(nbrVector);
     visited.add(nbrOffset);
     auto dist = metricFunc(queryVector, nbrVector, dimension);
     if (result.size() < ef || dist < result.top().distance) {
@@ -429,7 +430,7 @@ void OnDiskHNSWIndex::searchFromUnCheckpointed(transaction::Transaction* transac
     for (auto offset = hnswStorageInfo.numCheckpointedNodes; offset < numTotalRows; offset++) {
         const auto vector = embeddings->getEmbedding(transaction, embeddingScanState, offset);
         if (!vector) {
-            continue; // Skip null values.
+            continue; // Skip null or deleted values.
         }
         auto dist = metricFunc(queryVector, vector, embeddings->getDimension());
         result.emplace_back(offset, dist);
@@ -524,6 +525,7 @@ common::offset_t OnDiskHNSWIndex::searchNNInUpperLayer(transaction::Transaction*
     double lastMinDist = std::numeric_limits<float>::max();
     const auto currNodeVector = embeddings->getEmbedding(transaction,
         *searchState.embeddingScanState.scanState, currentNodeOffset);
+    KU_ASSERT(currNodeVector);
     auto minDist = metricFunc(queryVector, currNodeVector, embeddings->getDimension());
     KU_ASSERT(lastMinDist >= 0);
     KU_ASSERT(minDist >= 0);
@@ -538,10 +540,13 @@ common::offset_t OnDiskHNSWIndex::searchNNInUpperLayer(transaction::Transaction*
                 auto neighbor = neighbors[i];
                 const auto nbrVector = embeddings->getEmbedding(transaction,
                     *searchState.embeddingScanState.scanState, neighbor.offset);
-                const auto dist = metricFunc(queryVector, nbrVector, embeddings->getDimension());
-                if (dist < minDist) {
-                    minDist = dist;
-                    currentNodeOffset = neighbor.offset;
+                if (nbrVector) {
+                    const auto dist =
+                        metricFunc(queryVector, nbrVector, embeddings->getDimension());
+                    if (dist < minDist) {
+                        minDist = dist;
+                        currentNodeOffset = neighbor.offset;
+                    }
                 }
             });
         }
@@ -643,6 +648,9 @@ void OnDiskHNSWIndex::initSearchCandidates(transaction::Transaction* transaction
             searchState.visited.add(candidate);
             const auto candidateVector = embeddings->getEmbedding(transaction,
                 *searchState.embeddingScanState.scanState, candidate);
+            if (!candidateVector) {
+                continue;
+            }
             auto candidateDist =
                 metricFunc(queryVector, candidateVector, embeddings->getDimension());
             candidates.push({candidate, candidateDist});
@@ -664,9 +672,11 @@ void OnDiskHNSWIndex::oneHopSearch(transaction::Transaction* transaction, const 
             if (!searchState.visited.contains(nbr.offset) && searchState.isMasked(nbr.offset)) {
                 const auto nbrVector = embeddings->getEmbedding(transaction,
                     *searchState.embeddingScanState.scanState, nbr.offset);
-                processNbrNodeInKNNSearch(queryVector, nbrVector, nbr.offset, searchState.ef,
-                    searchState.visited, metricFunc, embeddings->getDimension(), candidates,
-                    results);
+                if (nbrVector) {
+                    processNbrNodeInKNNSearch(queryVector, nbrVector, nbr.offset, searchState.ef,
+                        searchState.visited, metricFunc, embeddings->getDimension(), candidates,
+                        results);
+                }
             }
         });
     }
@@ -695,17 +705,19 @@ min_node_priority_queue_t OnDiskHNSWIndex::collectFirstHopNbrsDirected(
             if (!searchState.visited.contains(nbrOffset)) {
                 const auto nbrVector = embeddings->getEmbedding(transaction,
                     *searchState.embeddingScanState.scanState, nbrOffset);
-                auto dist = metricFunc(queryVector, nbrVector, embeddings->getDimension());
-                candidatesForSecHop.push({nbrOffset, dist});
-                if (searchState.isMasked(nbrOffset)) {
-                    if (results.size() < searchState.ef || dist < results.top().distance) {
-                        if (results.size() == searchState.ef) {
-                            results.pop();
+                if (!nbrVector) {
+                    auto dist = metricFunc(queryVector, nbrVector, embeddings->getDimension());
+                    candidatesForSecHop.push({nbrOffset, dist});
+                    if (searchState.isMasked(nbrOffset)) {
+                        if (results.size() < searchState.ef || dist < results.top().distance) {
+                            if (results.size() == searchState.ef) {
+                                results.pop();
+                            }
+                            numVisitedNbrs++;
+                            searchState.visited.add(nbrOffset);
+                            results.push({nbrOffset, dist});
+                            candidates.push({nbrOffset, dist});
                         }
-                        numVisitedNbrs++;
-                        searchState.visited.add(nbrOffset);
-                        results.push({nbrOffset, dist});
-                        candidates.push({nbrOffset, dist});
                     }
                 }
             }
@@ -740,9 +752,11 @@ common::offset_vec_t OnDiskHNSWIndex::collectFirstHopNbrsBlind(
                     numVisitedNbrs++;
                     auto nbrVector = embeddings->getEmbedding(transaction,
                         *searchState.embeddingScanState.scanState, nbr.offset);
-                    processNbrNodeInKNNSearch(queryVector, nbrVector, nbr.offset, searchState.ef,
-                        searchState.visited, metricFunc, embeddings->getDimension(), candidates,
-                        results);
+                    if (nbrVector) {
+                        processNbrNodeInKNNSearch(queryVector, nbrVector, nbr.offset,
+                            searchState.ef, searchState.visited, metricFunc,
+                            embeddings->getDimension(), candidates, results);
+                    }
                 }
             }
         });
