@@ -25,14 +25,14 @@
 -STATEMENT CALL QUERY_VECTOR_INDEX('embeddings', 'e_hnsw_index', [0.1521,0.3021,0.5366,0.2774,0.5593,0.5589,0.1365,0.8557], 3, efs := 500) RETURN node.id ORDER BY distance;
 -CHECK_ORDER
 ---- 3
-332
 444
 133
+598
 -STATEMENT MATCH (e:embeddings) WHERE e.id = 444 DELETE e;
 ---- ok
 -STATEMENT CALL QUERY_VECTOR_INDEX('embeddings', 'e_hnsw_index', [0.1521,0.3021,0.5366,0.2774,0.5593,0.5589,0.1365,0.8557], 3, efs := 500) RETURN node.id ORDER BY distance;
 -CHECK_ORDER
 ---- 3
-333
-444
-222
+133
+598
+225

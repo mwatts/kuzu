@@ -66,11 +66,9 @@ NodeTableDeleteInfo PlanMapper::getNodeTableDeleteInfo(const TableCatalogEntry& 
     std::unordered_set<RelTable*> bwdRelTables;
     auto& nodeEntry = entry.constCast<NodeTableCatalogEntry>();
     for (auto relTable : getFwdRelTables(nodeEntry.getTableID(), clientContext)) {
-        // checkDetachDeleteRelDirection(relTable, table);
         fwdRelTables.insert(relTable);
     }
     for (auto relTable : getBwdRelTables(nodeEntry.getTableID(), clientContext)) {
-        // checkDetachDeleteRelDirection(relTable, table);
         bwdRelTables.insert(relTable);
     }
     return NodeTableDeleteInfo(table, std::move(fwdRelTables), std::move(bwdRelTables), pkPos);

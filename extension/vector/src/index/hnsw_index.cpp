@@ -579,6 +579,7 @@ std::vector<NodeWithDistance> OnDiskHNSWIndex::searchKNNInLowerLayer(
 
     const auto entryVector =
         embeddings->getEmbedding(transaction, *searchState.embeddingScanState.scanState, entryNode);
+    KU_ASSERT(entryVector);
     auto dist = metricFunc(queryVector, entryVector, embeddings->getDimension());
     candidates.push({entryNode, dist});
     searchState.visited.add(entryNode);
@@ -705,7 +706,7 @@ min_node_priority_queue_t OnDiskHNSWIndex::collectFirstHopNbrsDirected(
             if (!searchState.visited.contains(nbrOffset)) {
                 const auto nbrVector = embeddings->getEmbedding(transaction,
                     *searchState.embeddingScanState.scanState, nbrOffset);
-                if (!nbrVector) {
+                if (nbrVector) {
                     auto dist = metricFunc(queryVector, nbrVector, embeddings->getDimension());
                     candidatesForSecHop.push({nbrOffset, dist});
                     if (searchState.isMasked(nbrOffset)) {
@@ -834,6 +835,7 @@ void OnDiskHNSWIndex::shrinkForNode(transaction::Transaction* transaction, commo
     bool isUpperLayer, common::length_t maxDegree, CheckpointInsertionState& insertState) {
     const auto vector = embeddings->getEmbedding(transaction,
         *insertState.searchState.embeddingScanState.scanState, offset);
+    KU_ASSERT(vector);
     const auto& searchState = insertState.searchState;
     const auto& graph = isUpperLayer ? searchState.upperGraph : searchState.lowerGraph;
     const auto relTableID = isUpperLayer ? storageInfo->cast<HNSWStorageInfo>().upperRelTableID :
@@ -858,6 +860,9 @@ void OnDiskHNSWIndex::shrinkForNode(transaction::Transaction* transaction, commo
     std::vector<NodeWithDistance> nbrs;
     nbrs.reserve(nbrOffsets.size());
     for (size_t i = 0; i < nbrOffsets.size(); i++) {
+        if (!nbrVectors[i]) {
+            continue;
+        }
         auto dist = metricFunc(vector, nbrVectors[i], embeddings->getDimension());
         nbrs.emplace_back(nbrOffsets[i], dist);
     }
